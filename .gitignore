@@ -10,7 +10,8 @@ __pycache__/
 # Escludi i modelli
 *.pth
 
-# Escludi le immagini
-*.png
-*.jpg
-*.jpeg
+# Escludi i frame e le mask (mantengo i data processati)
+/TinyAgri/
+/masks/
+
+
