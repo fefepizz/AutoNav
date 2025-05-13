@@ -7,6 +7,9 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import datasets, transforms
 import tqdm
 import matplotlib.pyplot as plt
+import numpy as np
+import os
+import cv2
 
 
 # Setting `torch.manual_seed(42)` ensures that the random number generation in PyTorch is deterministic and reproducible. 
@@ -83,7 +86,7 @@ class NeuralNetwork(nn.Module):
         # network architecture after initial convolution and final fully connected layer
         in_channels = 32
         for i, (out_channels, stride) in enumerate(zip(channels, strides)):
-            ##################################################################################################################################################
+            
             # Depthwise convolution (separable by channel), followed by batch normalization
             self.dw_conv_layers.append(nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=stride, padding=1, groups=in_channels))
             self.dw_bn_layers.append(nn.BatchNorm2d(in_channels))
@@ -94,20 +97,16 @@ class NeuralNetwork(nn.Module):
             
             in_channels = out_channels
         
-        # Global average pooling --> replace with max pooling for lane detection
-        self.global_pool = nn.AdaptiveAvgPool2d(1)
+        # Max pooling
+        self.max_pool = nn.MaxPool2d(kernel_size=2, stride=2)
         
-        # Final fully connected layer to map to the number of classes
-        self.final_fc = nn.Linear(channels[-1], num_classes)  # input is the last channel size
-    
+        # Final layer that maps to the mask (80x80)
+        self.final_conv = nn.Conv2d(in_channels, 1, kernel_size=1)
     
     # forward method defines the flow of data through the network
     # It takes the input x and passes it through the layers defined in __init__
     def forward(self, x):    
 
-        # Reshape the input to (batch_size, 1, 28, 28)####################################################################################################
-        x = x.view(x.size(0), 3, 32, 32)
-        
         # Initial convolution (layer 1)
         x = self.conv_init(x)
         x = self.bn_init(x)
@@ -127,15 +126,13 @@ class NeuralNetwork(nn.Module):
             x = self.relu(x)
             
             # Apply dropout for regularization
-            if i % 4 == 0:
-                x = self.dropout(x)
+            x = self.dropout(x)
         
         # Global average pooling and reshape to [batch_size, num_classes]
-        x = self.global_pool(x)
-        x = x.view(x.size(0), -1)
+        x = nn.functional.interpolate(x, size=(80, 80), mode="bilinear", align_corners=False)  # Ensure output matches 80x80 label dimensions
         
         # Map to the correct number of output classes
-        x = self.final_fc(x)
+        x = self.final_conv(x)
         
         return x
 
@@ -164,7 +161,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
         total = 0
         
         # Wrap the train_loader with tqdm for progress tracking
-        train_loop = tqdm.tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}", leave=False)
+        train_loop = tqdm.tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs} (Train)", leave=True, ncols=100)
         
         for inputs, labels in train_loop:
             
@@ -176,7 +173,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
             
             # Forward pass
             outputs = model(inputs)
-            
+                        
             # Compute the loss using the criterion (loss function)
             loss = criterion(outputs, labels)
             
@@ -315,26 +312,46 @@ def plot_prediction(image, actual_label, predicted_label, class_names=None):
 # Main execution
 def main():
     
+    
+    # Define Dice Loss function
+    class DiceLoss(nn.Module):
+        
+        def __init__(self):
+            super(DiceLoss, self).__init__()
+    
+        def forward(self, outputs, targets):
+            
+            # Apply sigmoid to outputs
+            outputs = torch.sigmoid(outputs)  
+            
+            # Ensure outputs and targets have the same shape
+            targets = targets.view_as(outputs)  # Reshape targets to match outputs
+            intersection = (outputs * targets).sum()
+            smooth = 1.0
+            dice = (2.0 * intersection + smooth) / (outputs.sum() + targets.sum() + smooth)
+            return 1 - dice
+    
+    
     # Hyperparameters
-    num_classes = 10
+    num_classes = 2
     batch_size = 64
     learning_rate = 1e-3
-    num_epochs = 50
+    num_epochs = 10
     
     ################################################################################################
     
     # Channel configuration for each block
     # Encoder path (increasing channels, decreasing spatial dimensions)
-    encoder_channels = [32, 64, 128, 256]  
-    encoder_strides = [2, 2, 2, 2]         
-
+    encoder_channels = [16, 32, 64, 128, 256, 512]  # Added more layers for a deeper encoder
+    encoder_strides = [2, 2, 2, 2, 2, 2]  # Added strides for the deeper encoder
+    
     # Bottleneck
-    bottleneck_channels = [512]
-    bottleneck_strides = [1]
-       
+    bottleneck_channels = [512, 256]  # Added an additional bottleneck layer
+    bottleneck_strides = [1, 1]  # Added an additional stride for the deeper bottleneck
+           
     # Decoder path (decreasing channels)
-    decoder_channels = [256, 128, 64, 32] # Gradually decrease channels
-    decoder_strides = [2, 2, 2, 2]        # Upsample spatial dimensions by a factor of 2 at each step
+    decoder_channels = [512, 256, 128, 64, 32, 16]  # Added more layers for a deeper decoder
+    decoder_strides = [2, 2, 2, 2, 2, 2]  # Added strides for the deeper decoder
      
     ################################################################################################# 
         
@@ -348,10 +365,49 @@ def main():
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))  # RGB normalization
     ])
     
-    # Ensure the test value is not used in training
-    test_sample = val_dataset[0]            # Reserve the first sample from the validation dataset
-    val_dataset.data = val_dataset.data[1:] 
-    val_dataset.targets = val_dataset.targets[1:]
+    
+    # Define paths for images and masks
+    img_dir = "processed_data/img"
+    mask_dir = "processed_data/mask"
+    
+    # Load image and mask file paths
+    img_files = sorted([os.path.join(img_dir, f) for f in os.listdir(img_dir) if f.endswith(".png")])
+    mask_files = sorted([os.path.join(mask_dir, f) for f in os.listdir(mask_dir) if f.endswith(".png")])
+    
+    # Ensure the number of images matches the number of masks
+    assert len(img_files) == len(mask_files), "Mismatch between images and masks"
+    
+    
+    # Define a dataset class for loading images and masks
+    class ImageMaskDataset(Dataset):
+        def __init__(self, img_files, mask_files, transform=None):
+            self.img_files = img_files
+            self.mask_files = mask_files
+            self.transform = transform
+    
+        def __len__(self):
+            return len(self.img_files)
+    
+        def __getitem__(self, idx):
+            try:
+                img = cv2.imread(self.img_files[idx])[:, :, ::-1]  # Convert BGR to RGB
+                mask = cv2.imread(self.mask_files[idx], cv2.IMREAD_GRAYSCALE)  # Load as grayscale
+            except Exception as e:
+                raise RuntimeError(f"Error loading image or mask at index {idx}: {e}")
+            
+            img = torch.tensor(img.copy(), dtype=torch.float32).permute(2, 0, 1) / 255.0  # Normalize to [0, 1]
+            mask = torch.tensor(mask, dtype=torch.float32).unsqueeze(0) / 255.0  # Normalize to [0, 1]
+              
+            return img, mask
+    
+    # Create datasets
+    dataset = ImageMaskDataset(img_files, mask_files, transform=transform)
+    
+    # Split dataset into training and validation sets
+    train_size = int(0.8 * len(dataset))
+    val_size = len(dataset) - train_size
+    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+    
     
     # Create data loaders
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -370,7 +426,7 @@ def main():
     print(f"Model size: {model_size_mb:.2f} MB")
     
     # Loss function and optimizer
-    criterion = nn.CrossEntropyLoss()
+    criterion = DiceLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     
     # Train the model
@@ -382,17 +438,21 @@ def main():
     # Example of inference
     model.eval()
     with torch.no_grad():
-        # Use the reserved test samples for inference
-        example_input, actual_label = test_sample
-        example_input = example_input.unsqueeze(0).to(device)  # Add batch dimension
+        
+        # Use a sample from the validation dataset for inference
+        example_input, actual_label = next(iter(val_loader))
+        example_input = example_input[0].unsqueeze(0).to(device)  # Select the first sample and add batch dimension
+        actual_label = actual_label[0].to(device)  # Ensure label is on the same device
         print(f"Actual label: {actual_label}")
         output = model(example_input)
-        _, predicted = torch.max(output, 1)
-        print(f"Predicted class: {predicted.item()}")
+        output = torch.sigmoid(output)  # Convert logits to probabilities
+        predicted = (output > 0.5).float()  # Threshold to get binary mask
+
+        print(f"Predicted mask shape: {predicted.shape}")  # Output the shape of the predicted mask
             
             # Plot the image and prediction
         try:
-            plot_prediction(example_input[0], actual_label, predicted.item())
+            plot_prediction(example_input[0], actual_label, predicted[0])
         except Exception as e:
             print(f"Could not plot image: {e}")
 

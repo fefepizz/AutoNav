@@ -107,14 +107,22 @@ for i, (img, mask, name) in enumerate(data):
     cv2.imwrite(mask_path, mask)
 
 
+# Create img and mask subdirectories
+img_dir = os.path.join(output_dir, "img")
+mask_dir = os.path.join(output_dir, "mask")
+if not os.path.exists(img_dir):
+    os.makedirs(img_dir)
+if not os.path.exists(mask_dir):
+    os.makedirs(mask_dir)
+
 for i, (img, mask, name) in enumerate(data):
     # Save the processed image
-    img_path = os.path.join(output_dir, name)  # Use name directly
+    img_path = os.path.join(output_dir, "img", name)  # Use name directly
     cv2.imwrite(img_path, img)
     
     # Save the processed mask
     mask_name = name.replace(".png", "_mask.png")  # Append "_mask" to the name
-    mask_path = os.path.join(output_dir, mask_name)
+    mask_path = os.path.join(output_dir, "mask", mask_name)
     cv2.imwrite(mask_path, mask)
     
     print(f"Saving image to: {img_path}")
@@ -122,4 +130,3 @@ for i, (img, mask, name) in enumerate(data):
 
 
 print(f"Processed {len(data)} image-mask pairs and saved to {output_dir}")
-
