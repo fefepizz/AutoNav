@@ -59,11 +59,11 @@ def process_data(img_folder, mask_folder, folder_idx):
                 
                 if img is not None and mask is not None:
                     
-                    # reshape the image to 80x80
-                    img_resized = cv2.resize(img, (80, 80))
+                    # reshape the image to 64x48
+                    img_resized = cv2.resize(img, (64, 48))
                     
-                    # reshape the mask to 80x80
-                    mask_resized = cv2.resize(mask, (80, 80))
+                    # reshape the mask to 634x48
+                    mask_resized = cv2.resize(mask, (64, 48))
                     
                     # format the name as frame{i}_{j}.png
                     formatted_name = f"frame{folder_idx}_{frame_num}.png"

@@ -69,9 +69,10 @@ class NeuralNetwork(nn.Module):
         self.dropout = nn.Dropout(0.2)
         
         # intial convolutional layer, followed by batch normalization
+        out_channels = 8 
         # out cghannels? ###########################################################
-        self.conv_init = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=5, stride=2, padding=2)
-        self.bn_init = nn.BatchNorm2d(32)
+        self.conv_init = nn.Conv2d(in_channels=3, out_channels=out_channels, kernel_size=5, stride=2, padding=2)
+        self.bn_init = nn.BatchNorm2d(out_channels)
         
         # Use ModuleList to store multiple layers of the same type in a list
         
@@ -86,7 +87,8 @@ class NeuralNetwork(nn.Module):
         # The depthwise convolution applies a single filter to each input channel, while the pointwise convolution combines the outputs of the depthwise convolution.
         
         # network architecture after initial convolution and final fully connected layer
-        in_channels = 32 ###################################################################################################################
+        ###################################################################################################################
+        in_channels = out_channels
         for i, (out_channels, stride) in enumerate(zip(channels, strides)):
             
             # Depthwise convolution (separable by channel), followed by batch normalization
@@ -98,6 +100,7 @@ class NeuralNetwork(nn.Module):
             self.pw_bn_layers.append(nn.BatchNorm2d(out_channels))
             
             in_channels = out_channels
+
         
         # Max pooling
         # in teoria meglio per di avg pooling #####################################################################################################
@@ -133,7 +136,8 @@ class NeuralNetwork(nn.Module):
         
         # Global average pooling and reshape 
         # ok ridimensionamento così? ########################################################################################################
-        x = nn.functional.interpolate(x, size=(80, 80), mode="bilinear", align_corners=False)  # Ensure output matches 80x80 label dimensions
+        # torch assumes the size is (height, width)
+        x = nn.functional.interpolate(x, size=(48,64), mode="bilinear", align_corners=False)  # Ensure output matches label dimensions
         
         # Map to the correct number of output classes
         x = self.final_conv(x)
@@ -142,7 +146,7 @@ class NeuralNetwork(nn.Module):
 
 
 # Training function
-def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs=10):
+def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs=20):
     
     # Saves the best validation value, when updated the model's state is saved
     best_val_acc = 0.0
@@ -361,24 +365,24 @@ def main():
     
     # Hyperparameters
     
-    batch_size = 2
-    learning_rate = 1e-4
-    num_epochs = 50
+    batch_size = 16
+    learning_rate = 1e-3
+    num_epochs = 20
     
     ################################################################################################
     
     # Channel configuration for each block
     # Encoder path (increasing channels, decreasing spatial dimensions)
-    encoder_channels = [16, 32, 64, 128]  # Added more layers for a deeper encoder
-    encoder_strides = [2, 2, 2, 2]  # Added strides for the deeper encoder
+    encoder_channels = [16, 32, 64]  # Added more layers for a deeper encoder
+    encoder_strides = [2, 2, 2]  # Added strides for the deeper encoder
     
     # Bottleneck
-    bottleneck_channels = [256]  # Added an additional bottleneck layer
+    bottleneck_channels = [128]  # Added an additional bottleneck layer
     bottleneck_strides = [1]  # Added an additional stride for the deeper bottleneck
            
     # Decoder path (decreasing channels)
-    decoder_channels = [128, 64, 32, 16]  # Added more layers for a deeper decoder
-    decoder_strides = [2, 2, 2, 2]  # Added strides for the deeper decoder
+    decoder_channels = [64, 32, 16]  # Added more layers for a deeper decoder
+    decoder_strides = [2, 2, 2]  # Added strides for the deeper decoder
      
     ################################################################################################# 
         
@@ -511,12 +515,9 @@ def main():
         example_input, actual_label = next(iter(val_loader))
         example_input = example_input[0].unsqueeze(0).to(device)  # Select the first sample and add batch dimension
         actual_label = actual_label[0].to(device)  # Ensure label is on the same device
-        print(f"Actual label: {actual_label.shape}")
         output = model(example_input)
         output = torch.sigmoid(output)  # Convert logits to probabilities
         predicted = (output > 0.5).float()  # Threshold to get binary mask
-
-        print(f"Predicted mask shape: {predicted.shape}")  # Output the shape of the predicted mask
 
         # Plot the image and prediction
         try:
