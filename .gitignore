@@ -9,6 +9,7 @@ venv/
 __pycache__/
 
 # Escludi i modelli
+/sam_model/
 *.pth
 
 # Escludi i frame e le mask (mantengo i data processati)
