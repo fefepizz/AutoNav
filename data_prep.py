@@ -62,7 +62,7 @@ def process_data(img_folder, mask_folder, folder_idx):
                     # reshape the image to 64x48
                     img_resized = cv2.resize(img, (64, 48))
                     
-                    # reshape the mask to 634x48
+                    # reshape the mask to 64x48
                     mask_resized = cv2.resize(mask, (64, 48))
                     
                     # format the name as frame{i}_{j}.png

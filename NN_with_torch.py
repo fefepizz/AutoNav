@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
-from torchvision import datasets, transforms
+from torchvision import transforms
 import tqdm
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
@@ -13,7 +13,6 @@ import os
 import cv2
 
 
-# Setting `torch.manual_seed(42)` ensures that the random number generation in PyTorch is deterministic and reproducible. 
 torch.cuda.empty_cache()
 torch.manual_seed(42)
 torch.cuda.manual_seed(42)
@@ -56,13 +55,22 @@ class CustomDataset(Dataset):
 
 # Define the neural network architecture
 class NeuralNetwork(nn.Module):
+    
+    # the net is inspired by:
+    # MobilNet -> Depthwise Separable Convolution, Relu6 (width multiplier)
+    # EfficientNet -> Depthwise Separable Convolution, (equation to choose parameters for best efficience), 
+    #                 (Expansion after depthwise conv and Swish activation function)
+    # U-Net -> Encoder-Decoder architecture, skip (connections)
+    
+    # (in brackets features are not implemented, also for complexity in MicroFlow implementation)
+    # The network needs to be lightweight and efficient.
+       
     def __init__(self, channels, strides):
         
         # Call the parent class constructor
         super(NeuralNetwork, self).__init__()
         
-        # ReLU activation function
-        # relu6? ##########################################################################################################################
+        # ReLU6 activation function
         self.relu6 = nn.ReLU6()
   
         # Dropout layer to prevent overfitting
@@ -70,7 +78,7 @@ class NeuralNetwork(nn.Module):
         
         # intial convolutional layer, followed by batch normalization
         out_channels = 8 
-        # out cghannels? ###########################################################
+        # out channels? ###############################################################################
         self.conv_init = nn.Conv2d(in_channels=3, out_channels=out_channels, kernel_size=5, stride=2, padding=2)
         self.bn_init = nn.BatchNorm2d(out_channels)
         
@@ -103,7 +111,7 @@ class NeuralNetwork(nn.Module):
 
         
         # Max pooling
-        # in teoria meglio per di avg pooling #####################################################################################################
+        # in teoria meglio di avg pooling #####################################################################################################
         self.max_pool = nn.MaxPool2d(kernel_size=2, stride=2)
         
         # Final layer that maps to the mask (80x80) dovrebbe essere ok ##############################################################################
@@ -195,20 +203,16 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
             
             
             # Statistics
-            
+    
             # accumulate the loss for the current batch
             running_loss += loss.item() * inputs.size(0)
-            
-            # da sistemare ###########################################################################################################
-            
+             
             # Pixel-wise accuracy for binary mask
-            preds = (torch.sigmoid(outputs) > 0.5).float()
-            labels_bin = (labels > 0.5).float()
-            correct += (preds == labels_bin).float().sum().item()
+            preds = (torch.sigmoid(outputs) > 0.5)
+            labels_bin = (labels > 0.5)
+            correct += (preds == labels_bin).sum().item()
             total += labels.numel()
-            
-            # fino qui ###########################################################################################################
-        
+       
         epoch_loss = running_loss / len(train_loader.dataset)
         epoch_acc = correct / total
         
@@ -239,17 +243,15 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
                 # Forward pass and compute the loss (no backward pass needed)
                 outputs = model(inputs)
                 loss = criterion(outputs, labels)
-                
-                # come prima ##################################################################################################################
-                
+                              
                 # Compute the statistics
                 val_loss += loss.item() * inputs.size(0)
+                
                 # Pixel-wise accuracy for binary mask
-                preds = (torch.sigmoid(outputs) > 0.5).float()
-                labels_bin = (labels > 0.5).float()
-                # fino qui ###################################################################################################################
-
-                val_correct += (preds == labels_bin).float().sum().item()
+                preds = (torch.sigmoid(outputs) > 0.5)
+                labels_bin = (labels > 0.5)
+                
+                val_correct += (preds == labels_bin).sum().item()
                 val_total += labels.numel()
             
             val_loss /= len(val_loader.dataset)
@@ -365,7 +367,7 @@ def main():
     
     # Hyperparameters
     
-    batch_size = 16
+    batch_size = 8
     learning_rate = 1e-3
     num_epochs = 20
     
@@ -373,16 +375,16 @@ def main():
     
     # Channel configuration for each block
     # Encoder path (increasing channels, decreasing spatial dimensions)
-    encoder_channels = [16, 32, 64]  # Added more layers for a deeper encoder
-    encoder_strides = [2, 2, 2]  # Added strides for the deeper encoder
+    encoder_channels = [16, 32, 64, 128, 256, 512]  # Much deeper encoder
+    encoder_strides = [2, 2, 2, 2, 2, 2]            # Strides for each encoder layer
     
     # Bottleneck
-    bottleneck_channels = [128]  # Added an additional bottleneck layer
-    bottleneck_strides = [1]  # Added an additional stride for the deeper bottleneck
+    bottleneck_channels = [1024, 1024, 1024]        # Deeper bottleneck
+    bottleneck_strides = [1, 1, 1]                  # Strides for bottleneck layers
            
     # Decoder path (decreasing channels)
-    decoder_channels = [64, 32, 16]  # Added more layers for a deeper decoder
-    decoder_strides = [2, 2, 2]  # Added strides for the deeper decoder
+    decoder_channels = [512, 256, 128, 64, 32, 16]  # Much deeper decoder
+    decoder_strides = [2, 2, 2, 2, 2, 2]            # Strides for each decoder layer
      
     ################################################################################################# 
         
@@ -408,19 +410,14 @@ def main():
     img_files = sorted([os.path.join(img_dir, f) for f in os.listdir(img_dir) if f.endswith(".png")])
     mask_files = sorted([os.path.join(mask_dir, f) for f in os.listdir(mask_dir) if f.endswith(".png")])
     
-    
-    # DEBUG         #######################################################################################################
-    # Limit data to a small subset for intentional overfitting
-    num_samples = 6  # Choose a small number (e.g., 4, 6, or 8)
-    img_files = img_files[:num_samples]
-    mask_files = mask_files[:num_samples]
+
     
     
     # Ensure the number of images matches the number of masks
     assert len(img_files) == len(mask_files), "Mismatch between images and masks"
     
     
-    # Define a dataset class for loading images and masks
+    # Define a dataset class for loading images and masks 
     class ImageMaskDataset(Dataset):
         def __init__(self, img_files, mask_files, transform=None):
             self.img_files = img_files
@@ -457,36 +454,7 @@ def main():
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
     
     
-    # Riscrivo la funzione di loss ###########################################################################################
-    # Compute pos_weight for BCE
-    fg = sum((dataset[i][1] > 0.5).sum().item() for i in range(len(dataset)))
-    bg = sum((dataset[i][1] <= 0.5).sum().item() for i in range(len(dataset)))
-    pos_weight = torch.tensor([bg / (fg + 1e-8)])  # Avoid division by zero
-
-
-    # --- Define Dice + weighted BCE Loss function + L1 penalty on predicted mask ---
-    class DiceBCELoss(nn.Module):
-        def __init__(self, alpha=0.5, pos_weight=None, lambda_l1=0.05):
-            super(DiceBCELoss, self).__init__()
-            self.alpha = alpha
-            self.lambda_l1 = lambda_l1
-            self.bce = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-
-        def forward(self, outputs, targets):
-            bce_loss = self.bce(outputs, targets)
-            outputs_sigmoid = torch.sigmoid(outputs)
-            targets = targets.view_as(outputs_sigmoid)
-            intersection = (outputs_sigmoid * targets).sum()
-            smooth = 1.0
-            dice = (2.0 * intersection + smooth) / (outputs_sigmoid.sum() + targets.sum() + smooth)
-            dice_loss = 1 - dice
-            # L1 penalty on predicted mask (encourages sparsity)
-            l1_penalty = outputs_sigmoid.mean()
-            return self.alpha * bce_loss + (1 - self.alpha) * dice_loss + self.lambda_l1 * l1_penalty
-        
-        # Fino a qui ##########################################################################################################
-
-    # Initialize the model
+       # Initialize the model
     model = NeuralNetwork(channels, strides).to(device)
     
     # Print model size information
@@ -499,7 +467,8 @@ def main():
     print(f"Model size: {model_size_mb:.2f} MB")
     
     # Loss function and optimizer
-    criterion = DiceBCELoss(alpha=0.5, pos_weight=pos_weight.to(device), lambda_l1=0.2)
+    # It is possible to use the pos_weight parameter to balance the loss function ######################################
+    criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     
     # Train the model
