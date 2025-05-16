@@ -7,6 +7,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import datasets, transforms
 import tqdm
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import numpy as np
 import os
 import cv2
@@ -55,19 +56,20 @@ class CustomDataset(Dataset):
 
 # Define the neural network architecture
 class NeuralNetwork(nn.Module):
-    def __init__(self, num_classes, channels, strides):
+    def __init__(self, channels, strides):
         
         # Call the parent class constructor
         super(NeuralNetwork, self).__init__()
         
         # ReLU activation function
-        self.relu = nn.ReLU()
+        # relu6? ##########################################################################################################################
+        self.relu6 = nn.ReLU6()
   
         # Dropout layer to prevent overfitting
         self.dropout = nn.Dropout(0.2)
         
         # intial convolutional layer, followed by batch normalization
-        # the input is a 3-channel image (RGB), and the output is 32 channels (filters)
+        # out cghannels? ###########################################################
         self.conv_init = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=5, stride=2, padding=2)
         self.bn_init = nn.BatchNorm2d(32)
         
@@ -84,7 +86,7 @@ class NeuralNetwork(nn.Module):
         # The depthwise convolution applies a single filter to each input channel, while the pointwise convolution combines the outputs of the depthwise convolution.
         
         # network architecture after initial convolution and final fully connected layer
-        in_channels = 32
+        in_channels = 32 ###################################################################################################################
         for i, (out_channels, stride) in enumerate(zip(channels, strides)):
             
             # Depthwise convolution (separable by channel), followed by batch normalization
@@ -98,9 +100,10 @@ class NeuralNetwork(nn.Module):
             in_channels = out_channels
         
         # Max pooling
+        # in teoria meglio per di avg pooling #####################################################################################################
         self.max_pool = nn.MaxPool2d(kernel_size=2, stride=2)
         
-        # Final layer that maps to the mask (80x80)
+        # Final layer that maps to the mask (80x80) dovrebbe essere ok ##############################################################################
         self.final_conv = nn.Conv2d(in_channels, 1, kernel_size=1)
     
     # forward method defines the flow of data through the network
@@ -110,7 +113,7 @@ class NeuralNetwork(nn.Module):
         # Initial convolution (layer 1)
         x = self.conv_init(x)
         x = self.bn_init(x)
-        x = self.relu(x)
+        x = self.relu6(x)
     
         # Iterate through the depthwise and pointwise convolution layers
         for i in range(len(self.dw_conv_layers)):
@@ -118,17 +121,18 @@ class NeuralNetwork(nn.Module):
             # Depthwise convolution
             x = self.dw_conv_layers[i](x)
             x = self.dw_bn_layers[i](x)
-            x = self.relu(x)
+            x = self.relu6(x)
             
             # Pointwise convolution
             x = self.pw_conv_layers[i](x)
             x = self.pw_bn_layers[i](x)
-            x = self.relu(x)
+            x = self.relu6(x)
             
             # Apply dropout for regularization
             x = self.dropout(x)
         
-        # Global average pooling and reshape to [batch_size, num_classes]
+        # Global average pooling and reshape 
+        # ok ridimensionamento così? ########################################################################################################
         x = nn.functional.interpolate(x, size=(80, 80), mode="bilinear", align_corners=False)  # Ensure output matches 80x80 label dimensions
         
         # Map to the correct number of output classes
@@ -191,16 +195,21 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
             # accumulate the loss for the current batch
             running_loss += loss.item() * inputs.size(0)
             
-            # get the predicted class with the highest score
-            _, predicted = torch.max(outputs.data, 1) # _ is the max value, predicted is the index of the max value
+            # da sistemare ###########################################################################################################
             
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()       
-            epoch_loss = running_loss / len(train_loader.dataset)
-            epoch_acc = correct / total
+            # Pixel-wise accuracy for binary mask
+            preds = (torch.sigmoid(outputs) > 0.5).float()
+            labels_bin = (labels > 0.5).float()
+            correct += (preds == labels_bin).float().sum().item()
+            total += labels.numel()
             
-            # Update tqdm description with current metrics
-            train_loop.set_description(f"Epoch {epoch+1}/{num_epochs} (Train) Loss: {epoch_loss:.4f}, Acc: {epoch_acc:.4f}")
+            # fino qui ###########################################################################################################
+        
+        epoch_loss = running_loss / len(train_loader.dataset)
+        epoch_acc = correct / total
+        
+        # Update tqdm description with current metrics
+        train_loop.set_description(f"Epoch {epoch+1}/{num_epochs} (Train) Loss: {epoch_loss:.4f}, Acc: {epoch_acc:.4f}")
         
         
         # Validation phase
@@ -227,11 +236,17 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
                 outputs = model(inputs)
                 loss = criterion(outputs, labels)
                 
+                # come prima ##################################################################################################################
+                
                 # Compute the statistics
                 val_loss += loss.item() * inputs.size(0)
-                _, predicted = torch.max(outputs.data, 1)
-                val_total += labels.size(0)
-                val_correct += (predicted == labels).sum().item()
+                # Pixel-wise accuracy for binary mask
+                preds = (torch.sigmoid(outputs) > 0.5).float()
+                labels_bin = (labels > 0.5).float()
+                # fino qui ###################################################################################################################
+
+                val_correct += (preds == labels_bin).float().sum().item()
+                val_total += labels.numel()
             
             val_loss /= len(val_loader.dataset)
             val_acc = val_correct / val_total
@@ -286,72 +301,84 @@ def plot_metrics(train_losses, val_losses, train_accs, val_accs, epochs):
     plt.tight_layout()
     plt.savefig('training_metrics.png')
     plt.show()
-
+    
+     
+    # Da capire se funziona correttamente ##########################################################################################################      
+    
 # plot the image and the prediction
-def plot_prediction(image, actual_label, predicted_label, class_names=None):
+def plot_prediction(image, actual_mask, predicted_mask):
     
-    # Convert image tensor to numpy and denormalize
-    image = image.cpu().squeeze().permute(1, 2, 0).numpy()
+    # Plots the input image, the ground truth mask, and an overlay of ground truth and predicted masks.
+    # Ground truth mask is shown in green, predicted mask in red, and overlap in yellow.
     
-    # Denormalize from [-1, 1] to [0, 1]
-    image = (image * 0.5 + 0.5).clip(0, 1)
-    
-    plt.figure(figsize=(6, 6))
-    plt.imshow(image)
-    
-    # Get class names if available
-    actual_class = f"Class {actual_label}" if class_names is None else class_names[actual_label]
-    predicted_class = f"Class {predicted_label}" if class_names is None else class_names[predicted_label]
-    
-    title = f"Actual: {actual_class}\nPredicted: {predicted_class}"
-    plt.title(title)
-    plt.axis('off')
+    # Prepare image
+    img = image.cpu().squeeze().permute(1, 2, 0).numpy()
+    img = (img * 0.5 + 0.5).clip(0, 1)
+
+    # Prepare masks
+    gt_mask = actual_mask.cpu().squeeze().numpy()
+    pred_mask = predicted_mask.cpu().squeeze().numpy()
+
+    # Ensure masks are binary
+    gt_mask = (gt_mask > 0.5).astype(np.uint8)
+    pred_mask = (pred_mask > 0.5).astype(np.uint8)
+
+    # Overlay: green for GT, red for pred, yellow for overlap
+    overlay = np.zeros((*gt_mask.shape, 3), dtype=np.float32)
+    overlay[(gt_mask == 1) & (pred_mask == 0)] = [0, 1, 0]      # Green: GT only
+    overlay[(gt_mask == 0) & (pred_mask == 1)] = [1, 0, 0]      # Red: Pred only
+    overlay[(gt_mask == 1) & (pred_mask == 1)] = [1, 1, 0]      # Yellow: Overlap
+
+    fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+    axs[0].imshow(img)
+    axs[0].set_title("Input Image")
+    axs[0].axis('off')
+
+    axs[1].imshow(gt_mask, cmap='Greens', alpha=0.7)
+    axs[1].set_title("Ground Truth Mask")
+    axs[1].axis('off')
+
+    axs[2].imshow(img, alpha=0.7)
+    axs[2].imshow(overlay, alpha=0.5)
+    axs[2].set_title("Overlay: GT (Green), Pred (Red), Overlap (Yellow)")
+    axs[2].axis('off')
+
+    # Legend
+    green_patch = mpatches.Patch(color='green', label='Ground Truth')
+    red_patch = mpatches.Patch(color='red', label='Prediction')
+    yellow_patch = mpatches.Patch(color='yellow', label='Overlap')
+    axs[2].legend(handles=[green_patch, red_patch, yellow_patch], loc='lower right')
+
+    plt.tight_layout()
     plt.show()
+    
+    # Fino qui ##########################################################################################################
+
 
 
 # Main execution
 def main():
     
-    
-    # Define Dice Loss function
-    class DiceLoss(nn.Module):
-        
-        def __init__(self):
-            super(DiceLoss, self).__init__()
-    
-        def forward(self, outputs, targets):
-            
-            # Apply sigmoid to outputs
-            outputs = torch.sigmoid(outputs)  
-            
-            # Ensure outputs and targets have the same shape
-            targets = targets.view_as(outputs)  # Reshape targets to match outputs
-            intersection = (outputs * targets).sum()
-            smooth = 1.0
-            dice = (2.0 * intersection + smooth) / (outputs.sum() + targets.sum() + smooth)
-            return 1 - dice
-    
-    
     # Hyperparameters
-    num_classes = 2
-    batch_size = 64
-    learning_rate = 1e-3
-    num_epochs = 10
+    
+    batch_size = 2
+    learning_rate = 1e-4
+    num_epochs = 50
     
     ################################################################################################
     
     # Channel configuration for each block
     # Encoder path (increasing channels, decreasing spatial dimensions)
-    encoder_channels = [16, 32, 64, 128, 256, 512]  # Added more layers for a deeper encoder
-    encoder_strides = [2, 2, 2, 2, 2, 2]  # Added strides for the deeper encoder
+    encoder_channels = [16, 32, 64, 128]  # Added more layers for a deeper encoder
+    encoder_strides = [2, 2, 2, 2]  # Added strides for the deeper encoder
     
     # Bottleneck
-    bottleneck_channels = [512, 256]  # Added an additional bottleneck layer
-    bottleneck_strides = [1, 1]  # Added an additional stride for the deeper bottleneck
+    bottleneck_channels = [256]  # Added an additional bottleneck layer
+    bottleneck_strides = [1]  # Added an additional stride for the deeper bottleneck
            
     # Decoder path (decreasing channels)
-    decoder_channels = [512, 256, 128, 64, 32, 16]  # Added more layers for a deeper decoder
-    decoder_strides = [2, 2, 2, 2, 2, 2]  # Added strides for the deeper decoder
+    decoder_channels = [128, 64, 32, 16]  # Added more layers for a deeper decoder
+    decoder_strides = [2, 2, 2, 2]  # Added strides for the deeper decoder
      
     ################################################################################################# 
         
@@ -359,8 +386,11 @@ def main():
     channels = encoder_channels + bottleneck_channels + decoder_channels
     strides = encoder_strides + bottleneck_strides + decoder_strides
     
-    # Data loading and preprocessing, normalization reduces the com
+    # Scelgo trasformazioni ###########################################################################################à
     transform = transforms.Compose([
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomRotation(degrees=20),
+        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.05),
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))  # RGB normalization
     ])
@@ -373,6 +403,14 @@ def main():
     # Load image and mask file paths
     img_files = sorted([os.path.join(img_dir, f) for f in os.listdir(img_dir) if f.endswith(".png")])
     mask_files = sorted([os.path.join(mask_dir, f) for f in os.listdir(mask_dir) if f.endswith(".png")])
+    
+    
+    # DEBUG         #######################################################################################################
+    # Limit data to a small subset for intentional overfitting
+    num_samples = 6  # Choose a small number (e.g., 4, 6, or 8)
+    img_files = img_files[:num_samples]
+    mask_files = mask_files[:num_samples]
+    
     
     # Ensure the number of images matches the number of masks
     assert len(img_files) == len(mask_files), "Mismatch between images and masks"
@@ -399,6 +437,7 @@ def main():
             mask = torch.tensor(mask, dtype=torch.float32).unsqueeze(0) / 255.0  # Normalize to [0, 1]
               
             return img, mask
+        
     
     # Create datasets
     dataset = ImageMaskDataset(img_files, mask_files, transform=transform)
@@ -413,8 +452,38 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
     
+    
+    # Riscrivo la funzione di loss ###########################################################################################
+    # Compute pos_weight for BCE
+    fg = sum((dataset[i][1] > 0.5).sum().item() for i in range(len(dataset)))
+    bg = sum((dataset[i][1] <= 0.5).sum().item() for i in range(len(dataset)))
+    pos_weight = torch.tensor([bg / (fg + 1e-8)])  # Avoid division by zero
+
+
+    # --- Define Dice + weighted BCE Loss function + L1 penalty on predicted mask ---
+    class DiceBCELoss(nn.Module):
+        def __init__(self, alpha=0.5, pos_weight=None, lambda_l1=0.05):
+            super(DiceBCELoss, self).__init__()
+            self.alpha = alpha
+            self.lambda_l1 = lambda_l1
+            self.bce = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+
+        def forward(self, outputs, targets):
+            bce_loss = self.bce(outputs, targets)
+            outputs_sigmoid = torch.sigmoid(outputs)
+            targets = targets.view_as(outputs_sigmoid)
+            intersection = (outputs_sigmoid * targets).sum()
+            smooth = 1.0
+            dice = (2.0 * intersection + smooth) / (outputs_sigmoid.sum() + targets.sum() + smooth)
+            dice_loss = 1 - dice
+            # L1 penalty on predicted mask (encourages sparsity)
+            l1_penalty = outputs_sigmoid.mean()
+            return self.alpha * bce_loss + (1 - self.alpha) * dice_loss + self.lambda_l1 * l1_penalty
+        
+        # Fino a qui ##########################################################################################################
+
     # Initialize the model
-    model = NeuralNetwork(num_classes, channels, strides).to(device)
+    model = NeuralNetwork(channels, strides).to(device)
     
     # Print model size information
     total_params = sum(p.numel() for p in model.parameters()) # Total number of parameters in the model
@@ -426,7 +495,7 @@ def main():
     print(f"Model size: {model_size_mb:.2f} MB")
     
     # Loss function and optimizer
-    criterion = DiceLoss()
+    criterion = DiceBCELoss(alpha=0.5, pos_weight=pos_weight.to(device), lambda_l1=0.2)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     
     # Train the model
@@ -438,19 +507,18 @@ def main():
     # Example of inference
     model.eval()
     with torch.no_grad():
-        
         # Use a sample from the validation dataset for inference
         example_input, actual_label = next(iter(val_loader))
         example_input = example_input[0].unsqueeze(0).to(device)  # Select the first sample and add batch dimension
         actual_label = actual_label[0].to(device)  # Ensure label is on the same device
-        print(f"Actual label: {actual_label}")
+        print(f"Actual label: {actual_label.shape}")
         output = model(example_input)
         output = torch.sigmoid(output)  # Convert logits to probabilities
         predicted = (output > 0.5).float()  # Threshold to get binary mask
 
         print(f"Predicted mask shape: {predicted.shape}")  # Output the shape of the predicted mask
-            
-            # Plot the image and prediction
+
+        # Plot the image and prediction
         try:
             plot_prediction(example_input[0], actual_label, predicted[0])
         except Exception as e:
