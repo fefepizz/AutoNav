@@ -114,7 +114,7 @@ class NeuralNetwork(nn.Module):
         # in teoria meglio di avg pooling #####################################################################################################
         self.max_pool = nn.MaxPool2d(kernel_size=2, stride=2)
         
-        # Final layer that maps to the mask (80x80) dovrebbe essere ok ##############################################################################
+        # Final layer that maps to the mask (64x48) dovrebbe essere ok ##############################################################################
         self.final_conv = nn.Conv2d(in_channels, 1, kernel_size=1)
     
     # forward method defines the flow of data through the network
@@ -309,7 +309,6 @@ def plot_metrics(train_losses, val_losses, train_accs, val_accs, epochs):
     plt.show()
     
      
-    # Da capire se funziona correttamente ##########################################################################################################      
     
 # plot the image and the prediction
 def plot_prediction(image, actual_mask, predicted_mask):
@@ -329,38 +328,40 @@ def plot_prediction(image, actual_mask, predicted_mask):
     gt_mask = (gt_mask > 0.5).astype(np.uint8)
     pred_mask = (pred_mask > 0.5).astype(np.uint8)
 
-    # Overlay: green for GT, red for pred, yellow for overlap
+    # Create a white background and set yellow where mask==1
+    gt_mask_rgb = np.ones((*gt_mask.shape, 3), dtype=np.float32)  # white background
+    gt_mask_rgb[gt_mask == 1] = [1, 1, 0]  # yellow for foreground
+
+    # Overlay: yellow for GT only, red for wrong prediction only, green for overlap
     overlay = np.zeros((*gt_mask.shape, 3), dtype=np.float32)
-    overlay[(gt_mask == 1) & (pred_mask == 0)] = [0, 1, 0]      # Green: GT only
-    overlay[(gt_mask == 0) & (pred_mask == 1)] = [1, 0, 0]      # Red: Pred only
-    overlay[(gt_mask == 1) & (pred_mask == 1)] = [1, 1, 0]      # Yellow: Overlap
+    overlay[(gt_mask == 1) & (pred_mask == 0)] = [1, 1, 0]
+    overlay[(gt_mask == 0) & (pred_mask == 1)] = [1, 0, 0]
+    overlay[(gt_mask == 1) & (pred_mask == 1)] = [0, 1, 0]
 
     fig, axs = plt.subplots(1, 3, figsize=(15, 5))
     axs[0].imshow(img)
     axs[0].set_title("Input Image")
     axs[0].axis('off')
 
-    axs[1].imshow(gt_mask, cmap='Greens', alpha=0.7)
+    axs[1].imshow(gt_mask_rgb)
     axs[1].set_title("Ground Truth Mask")
     axs[1].axis('off')
 
     axs[2].imshow(img, alpha=0.7)
     axs[2].imshow(overlay, alpha=0.5)
-    axs[2].set_title("Overlay: GT (Green), Pred (Red), Overlap (Yellow)")
+    axs[2].set_title("Overlay: GT (Yellow), Wrong pred (Red), Overlap (Green)")
     axs[2].axis('off')
 
     # Legend
-    green_patch = mpatches.Patch(color='green', label='Ground Truth')
-    red_patch = mpatches.Patch(color='red', label='Prediction')
-    yellow_patch = mpatches.Patch(color='yellow', label='Overlap')
-    axs[2].legend(handles=[green_patch, red_patch, yellow_patch], loc='lower right')
+    yellow_patch = mpatches.Patch(color='yellow', label='Correct Label')
+    red_patch = mpatches.Patch(color='red', label='Wrong Pixel')
+    green_patch = mpatches.Patch(color='green', label='Correct Pixel')
+    axs[2].legend(handles=[yellow_patch, red_patch, green_patch], loc='lower right')
 
     plt.tight_layout()
     plt.show()
     
-    # Fino qui ##########################################################################################################
-
-
+    
 
 # Main execution
 def main():
@@ -369,7 +370,7 @@ def main():
     
     batch_size = 8
     learning_rate = 1e-3
-    num_epochs = 20
+    num_epochs = 1
     
     ################################################################################################
     
@@ -409,10 +410,7 @@ def main():
     # Load image and mask file paths
     img_files = sorted([os.path.join(img_dir, f) for f in os.listdir(img_dir) if f.endswith(".png")])
     mask_files = sorted([os.path.join(mask_dir, f) for f in os.listdir(mask_dir) if f.endswith(".png")])
-    
 
-    
-    
     # Ensure the number of images matches the number of masks
     assert len(img_files) == len(mask_files), "Mismatch between images and masks"
     
@@ -454,7 +452,7 @@ def main():
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
     
     
-       # Initialize the model
+    # Initialize the model
     model = NeuralNetwork(channels, strides).to(device)
     
     # Print model size information
