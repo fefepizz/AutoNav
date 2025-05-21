@@ -65,7 +65,7 @@ class NeuralNetwork(nn.Module):
     # (in brackets features are not implemented, also for complexity in MicroFlow implementation)
     # The network needs to be lightweight and efficient.
        
-    def __init__(self, channels, strides):
+    def __init__(self, e_channels, b_channels, d_channels, strides):
         
         # Call the parent class constructor
         super(NeuralNetwork, self).__init__()
@@ -77,7 +77,7 @@ class NeuralNetwork(nn.Module):
         self.dropout = nn.Dropout(0.2)
         
         # intial convolutional layer, followed by batch normalization
-        out_channels = 8 
+        out_channels = e_channels[0] 
         # out channels? ###############################################################################
         self.conv_init = nn.Conv2d(in_channels=3, out_channels=out_channels, kernel_size=5, stride=2, padding=2)
         self.bn_init = nn.BatchNorm2d(out_channels)
@@ -96,8 +96,12 @@ class NeuralNetwork(nn.Module):
         
         # network architecture after initial convolution and final fully connected layer
         ###################################################################################################################
-        in_channels = out_channels
-        for i, (out_channels, stride) in enumerate(zip(channels, strides)):
+        in_channels = e_channels[0]
+        encoder_layers = len(e_channels)
+        bottleneck_layers = len(b_channels)
+        
+        # Encoder: Downsampling layers
+        for out_channels, stride in zip(e_channels, strides[:encoder_layers]):
             
             # Depthwise convolution (separable by channel), followed by batch normalization
             self.dw_conv_layers.append(nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=stride, padding=1, groups=in_channels))
@@ -108,8 +112,33 @@ class NeuralNetwork(nn.Module):
             self.pw_bn_layers.append(nn.BatchNorm2d(out_channels))
             
             in_channels = out_channels
-
         
+        # Bottleneck layers
+        for out_channels, stride in zip(b_channels, strides[encoder_layers:encoder_layers + bottleneck_layers]):
+            
+            # Depthwise convolution (separable by channel), followed by batch normalization
+            self.dw_conv_layers.append(nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=stride, padding=1, groups=in_channels))
+            self.dw_bn_layers.append(nn.BatchNorm2d(in_channels))
+            
+            # Pointwise convolution (1x1 conv to change channels), followed by batch normalization
+            self.pw_conv_layers.append(nn.Conv2d(in_channels, out_channels, kernel_size=1))
+            self.pw_bn_layers.append(nn.BatchNorm2d(out_channels))
+            
+            in_channels = out_channels
+        
+        # Decoder: Upsampling layers
+        for out_channels, stride in zip(d_channels, strides[encoder_layers + bottleneck_layers:]):
+            
+            # Depthwise convolution (separable by channel), followed by batch normalization
+            self.dw_conv_layers.append(nn.ConvTranspose2d(in_channels, in_channels, kernel_size=3, stride=stride, padding=1, output_padding=stride - 1, groups=in_channels))
+            self.dw_bn_layers.append(nn.BatchNorm2d(in_channels))
+            
+            # Pointwise convolution (1x1 conv to change channels), followed by batch normalization
+            self.pw_conv_layers.append(nn.Conv2d(in_channels, out_channels, kernel_size=1))
+            self.pw_bn_layers.append(nn.BatchNorm2d(out_channels))
+            
+            in_channels = out_channels
+            
         # Max pooling
         # in teoria meglio di avg pooling #####################################################################################################
         self.max_pool = nn.MaxPool2d(kernel_size=2, stride=2)
@@ -376,22 +405,21 @@ def main():
     
     # Channel configuration for each block
     # Encoder path (increasing channels, decreasing spatial dimensions)
-    encoder_channels = [16, 32, 64, 128, 256, 512]  # Much deeper encoder
-    encoder_strides = [2, 2, 2, 2, 2, 2]            # Strides for each encoder layer
+    e_channels = [16, 32, 64, 128, 256, 512]  # Much deeper encoder
+    e_strides = [2, 2, 2, 2, 2, 2]            # Strides for each encoder layer
     
     # Bottleneck
-    bottleneck_channels = [1024, 1024, 1024]        # Deeper bottleneck
-    bottleneck_strides = [1, 1, 1]                  # Strides for bottleneck layers
+    b_channels = [1024, 1024, 1024]        # Deeper bottleneck
+    b_strides = [1, 1, 1]                  # Strides for bottleneck layers
            
     # Decoder path (decreasing channels)
-    decoder_channels = [512, 256, 128, 64, 32, 16]  # Much deeper decoder
-    decoder_strides = [2, 2, 2, 2, 2, 2]            # Strides for each decoder layer
+    d_channels = [512, 256, 128, 64, 32, 16]  # Much deeper decoder
+    d_strides = [2, 2, 2, 2, 2, 2]            # Strides for each decoder layer
      
     ################################################################################################# 
         
     # Combine encoder-bottleneck-decoder
-    channels = encoder_channels + bottleneck_channels + decoder_channels
-    strides = encoder_strides + bottleneck_strides + decoder_strides
+    strides = e_strides + b_strides + d_strides
     
     # Scelgo trasformazioni ###########################################################################################à
     transform = transforms.Compose([
@@ -453,7 +481,7 @@ def main():
     
     
     # Initialize the model
-    model = NeuralNetwork(channels, strides).to(device)
+    model = NeuralNetwork(e_channels, b_channels, d_channels, strides).to(device)
     
     # Print model size information
     total_params = sum(p.numel() for p in model.parameters()) # Total number of parameters in the model
