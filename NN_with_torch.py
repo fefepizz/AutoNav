@@ -74,7 +74,7 @@ class NeuralNetwork(nn.Module):
         self.relu6 = nn.ReLU6()
   
         # Dropout layer to prevent overfitting
-        self.dropout = nn.Dropout(0.2)
+        self.dropout = nn.Dropout(0.4)
         
         # intial convolutional layer, followed by batch normalization
         out_channels = e_channels[0] 
@@ -397,24 +397,24 @@ def main():
     
     # Hyperparameters
     
-    batch_size = 8
+    batch_size = 16
     learning_rate = 1e-3
-    num_epochs = 1
+    num_epochs = 20
     
     ################################################################################################
     
     # Channel configuration for each block
     # Encoder path (increasing channels, decreasing spatial dimensions)
-    e_channels = [16, 32, 64, 128, 256, 512]  # Much deeper encoder
-    e_strides = [2, 2, 2, 2, 2, 2]            # Strides for each encoder layer
+    e_channels = [64, 64, 128, 128, 256, 256, 512, 512]  # Deeper and narrower encoder
+    e_strides = [2, 2, 2, 2, 2, 2, 2, 2, 2]            # Strides for each encoder layer
     
     # Bottleneck
-    b_channels = [1024, 1024, 1024]        # Deeper bottleneck
-    b_strides = [1, 1, 1]                  # Strides for bottleneck layers
+    b_channels = [1024, 1024, 1024]           # Deeper and narrower bottleneck
+    b_strides = [1, 1, 1]                    # Strides for bottleneck layers
            
     # Decoder path (decreasing channels)
-    d_channels = [512, 256, 128, 64, 32, 16]  # Much deeper decoder
-    d_strides = [2, 2, 2, 2, 2, 2]            # Strides for each decoder layer
+    d_channels = [512, 512, 256, 256, 128, 128, 64, 64]      # Deeper and narrower decoder
+    d_strides = [2, 2, 2, 2, 2, 2, 2, 2, 2]           # Strides for each decoder layer
      
     ################################################################################################# 
         

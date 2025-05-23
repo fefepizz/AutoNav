@@ -13,6 +13,7 @@ __pycache__/
 *.pth
 
 # Escludi i frame e le mask (mantengo i data processati)
+/data/
 /TinyAgri/
 /masks/
 
