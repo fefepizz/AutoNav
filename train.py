@@ -8,17 +8,18 @@ from models import uNet
 import matplotlib.pyplot as plt
 import numpy as np
 import tqdm
-from utils import LoadDataset, plot_metrics
+from .utils import LoadDataset, plot_metrics, plot_prediction
 
 def train(model, device, epochs: int=1, learning_rate: float=1e-5, batch_size: int=1):
     
-   transform = transforms.Compose([
+    transform = transforms.Compose([
         transforms.RandomHorizontalFlip(),
         transforms.RandomRotation(degrees=20),
         transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.05),
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))  # RGB normalization
         ])
+    
     img_dir = "data/processed_data/img"
     mask_dir = "data/processed_data/mask"
 
@@ -124,9 +125,27 @@ def train(model, device, epochs: int=1, learning_rate: float=1e-5, batch_size: i
     
     plot_metrics(train_losses, val_losses, train_accs, val_accs, epochs)
     print(f'Best validation accuracy: {best_val_acc:.4f}')
+    
+    model.eval()
+    with torch.no_grad():
+        example_input, actual_label = next(iter(val_loader))
+        example_input = example_input[0].unsqueeze(0).to(device)  # Select the first sample and add batch dimension
+        actual_label = actual_label[0].to(device)  # Ensure label is on the same device
+        output = model(example_input)
+        output = torch.sigmoid(output)  # Convert logits to probabilities
+        predicted = (output > 0.5).float()  # Threshold to get binary mask
+
+        try:
+            plot_prediction(example_input[0], actual_label, predicted[0])
+        except Exception as e:
+            print(f"Could not plot image: {e}")
+    
     return model
 
 if __name__ == '__main__':
+    device='cuda' if torch.cuda.is_available() else 'cpu',
     model = uNet(n_channels=3)
     model = model.to(memory_format=torch.channels_last)
+    model = train(model, epochs=10, learning_rate=1e-4, batch_size=4)
+    
     
