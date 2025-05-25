@@ -21,7 +21,7 @@ class DoubleConv(nn.Module):
             nn.BatchNorm2d(mid_channels),
             nn.ReLU(inplace=True),
             #conv2
-            nn.Conv2d(mid_channels, mid_channels, kernel_size=3, stride=stride, padding=1, groups=mid_channels, bias=False),
+            nn.Conv2d(mid_channels, mid_channels, kernel_size=3, stride=1, padding=1, groups=mid_channels, bias=False),
             nn.BatchNorm2d(mid_channels),
             nn.Conv2d(mid_channels, out_channels, kernel_size=1, stride=1, padding=0, bias=False),
             nn.BatchNorm2d(out_channels),
@@ -50,6 +50,7 @@ class Up(nn.Module):
     """Upscaling then double conv"""
     
     def __init__(self, in_channels, out_channels, stride=1):
+        super().__init__()
         self.up = nn.ConvTranspose2d(in_channels, in_channels//2, kernel_size = 2, stride = 2)
         self.conv = DoubleConv(in_channels, out_channels, stride=stride)
     

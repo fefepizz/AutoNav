@@ -2,13 +2,11 @@ import torch
 from torch import nn, optim
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
-import cv2
 import os
-from models import uNet
-import matplotlib.pyplot as plt
-import numpy as np
 import tqdm
-from .utils import LoadDataset, plot_metrics, plot_prediction
+from models.uNet import uNet
+from utils.LoadDataset import LoadDataset
+from utils.metrics import plot_metrics, plot_prediction
 
 def train(model, device, epochs: int=1, learning_rate: float=1e-5, batch_size: int=1):
     
@@ -143,9 +141,7 @@ def train(model, device, epochs: int=1, learning_rate: float=1e-5, batch_size: i
     return model
 
 if __name__ == '__main__':
-    device='cuda' if torch.cuda.is_available() else 'cpu',
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = uNet(n_channels=3)
-    model = model.to(memory_format=torch.channels_last)
-    model = train(model, epochs=10, learning_rate=1e-4, batch_size=4)
-    
-    
+    model = model.to(device, memory_format=torch.channels_last)
+    model = train(model, epochs=10, learning_rate=1e-4, batch_size=4, device=device)

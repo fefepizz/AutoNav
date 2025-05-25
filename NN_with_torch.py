@@ -432,8 +432,8 @@ def main():
     
     
     # Define paths for images and masks
-    img_dir = "processed_data/img"
-    mask_dir = "processed_data/mask"
+    img_dir = "data/processed_data/img"
+    mask_dir = "data/processed_data/mask"
     
     # Load image and mask file paths
     img_files = sorted([os.path.join(img_dir, f) for f in os.listdir(img_dir) if f.endswith(".png")])

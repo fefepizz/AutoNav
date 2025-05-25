@@ -8,20 +8,20 @@ class uNet(nn.Module):
         self.n_channels = n_channels
 
         # Encoder
-        self.in_conv = DoubleConv(n_channels, 64, stride=2)
-        self.down1 = Down(64, 128, stride=2)
-        self.down2 = Down(128, 256, stride=2)
-        self.down3 = Down(256, 512, stride=2)
-        self.down4 = Down(512, 1024, stride=2)
+        self.in_conv = DoubleConv(n_channels, 64, stride=1)
+        self.down1 = Down(64, 128, stride=1)
+        self.down2 = Down(128, 256, stride=1)
+        self.down3 = Down(256, 512, stride=1)
+        self.down4 = Down(512, 1024, stride=1)
 
         # Bottleneck
         self.bottleneck = DoubleConv(1024, 1024)
 
         # Decoder
-        self.up1 = Up(1024, 512, stride=2)
-        self.up2 = Up(512, 256, stride=2)
-        self.up3 = Up(256, 128, stride=2)
-        self.up4 = Up(128, 64, stride=2)
+        self.up1 = Up(1024, 512, stride=1)
+        self.up2 = Up(512, 256, stride=1)
+        self.up3 = Up(256, 128, stride=1)
+        self.up4 = Up(128, 64, stride=1)
 
         # Output
         self.out_conv = nn.Conv2d(64, 1, kernel_size=1)
