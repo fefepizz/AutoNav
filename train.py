@@ -11,6 +11,7 @@ from utils.metrics import plot_metrics, plot_prediction
 def train(model, device, epochs: int=1, learning_rate: float=1e-5, batch_size: int=1):
     
     transform = transforms.Compose([
+        transforms.Resize((128, 128)),
         transforms.RandomHorizontalFlip(),
         transforms.RandomRotation(degrees=20),
         transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.05),
@@ -21,6 +22,7 @@ def train(model, device, epochs: int=1, learning_rate: float=1e-5, batch_size: i
     img_dir = "data/processed_data/img"
     mask_dir = "data/processed_data/mask"
 
+    """
     img_files = sorted([os.path.join(img_dir, f) for f in os.listdir(img_dir) if f.endswith(".png")])
     mask_files = sorted([os.path.join(mask_dir, f) for f in os.listdir(mask_dir) if f.endswith(".png")])
     assert len(img_files) == len(mask_files), "Mismatch between images and masks"
@@ -32,6 +34,26 @@ def train(model, device, epochs: int=1, learning_rate: float=1e-5, batch_size: i
     
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
+    """
+    
+    img_files = sorted([os.path.join(img_dir, f) for f in os.listdir(img_dir) if f.endswith(".png")])
+    mask_files = sorted([os.path.join(mask_dir, f) for f in os.listdir(mask_dir) if f.endswith(".png")])
+
+    # Split by frame prefix
+    train_img_files = [f for f in img_files if os.path.basename(f).startswith(("frame1", "frame2"))]
+    train_mask_files = [f for f in mask_files if os.path.basename(f).startswith(("frame1", "frame2"))]
+    val_img_files = [f for f in img_files if os.path.basename(f).startswith(("frame3", "frame4"))]
+    val_mask_files = [f for f in mask_files if os.path.basename(f).startswith(("frame3", "frame4"))]
+
+    assert len(train_img_files) == len(train_mask_files), "Mismatch between training images and masks"
+    assert len(val_img_files) == len(val_mask_files), "Mismatch between validation images and masks"
+
+    train_dataset = LoadDataset(train_img_files, train_mask_files, transform=transform)
+    val_dataset = LoadDataset(val_img_files, val_mask_files, transform=transform)
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size)
+    
     
     model = model
     
