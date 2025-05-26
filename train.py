@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 import os
 import tqdm
+import matplotlib.pyplot as plt
 from models.uNet import uNet
 from utils.LoadDataset import LoadDataset
 from utils.metrics import plot_metrics, plot_prediction
@@ -11,12 +12,12 @@ from utils.metrics import plot_metrics, plot_prediction
 def train(model, device, epochs: int=1, learning_rate: float=1e-5, batch_size: int=1):
     
     transform = transforms.Compose([
-        transforms.Resize((128, 128)),
+        # transforms.Resize((128, 128)),
         transforms.RandomHorizontalFlip(),
         transforms.RandomRotation(degrees=20),
         transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.05),
         transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))  # RGB normalization
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
     
     img_dir = "data/processed_data/img"
@@ -39,7 +40,6 @@ def train(model, device, epochs: int=1, learning_rate: float=1e-5, batch_size: i
     img_files = sorted([os.path.join(img_dir, f) for f in os.listdir(img_dir) if f.endswith(".png")])
     mask_files = sorted([os.path.join(mask_dir, f) for f in os.listdir(mask_dir) if f.endswith(".png")])
 
-    # Split by frame prefix
     train_img_files = [f for f in img_files if os.path.basename(f).startswith(("frame1", "frame2"))]
     train_mask_files = [f for f in mask_files if os.path.basename(f).startswith(("frame1", "frame2"))]
     val_img_files = [f for f in img_files if os.path.basename(f).startswith(("frame3", "frame4"))]
@@ -57,7 +57,7 @@ def train(model, device, epochs: int=1, learning_rate: float=1e-5, batch_size: i
     
     model = model
     
-    total_params = sum(p.numel() for p in model.parameters()) # Total number of parameters in the model
+    total_params = sum(p.numel() for p in model.parameters())
     total_trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     model_size_mb = sum(p.numel() * p.element_size() for p in model.parameters()) / (1024 * 1024)
     print(f"Model Summary:")
@@ -149,14 +149,20 @@ def train(model, device, epochs: int=1, learning_rate: float=1e-5, batch_size: i
     model.eval()
     with torch.no_grad():
         example_input, actual_label = next(iter(val_loader))
-        example_input = example_input[0].unsqueeze(0).to(device)  # Select the first sample and add batch dimension
-        actual_label = actual_label[0].to(device)  # Ensure label is on the same device
+        example_input = example_input[0].unsqueeze(0).to(device)
+        actual_label = actual_label[0].to(device)
         output = model(example_input)
-        output = torch.sigmoid(output)  # Convert logits to probabilities
-        predicted = (output > 0.5).float()  # Threshold to get binary mask
+        output = torch.sigmoid(output)
+        predicted = (output > 0.5).float()
 
         try:
             plot_prediction(example_input[0], actual_label, predicted[0])
+            #################################################################################
+            # fig = plot_prediction(example_input[0], actual_label, predicted[0])
+            # plt.savefig("example_prediction.png")
+            # plt.close(fig)
+            # print("Saved prediction plot as example_prediction.png")
+            ##################################################################################
         except Exception as e:
             print(f"Could not plot image: {e}")
     
@@ -166,4 +172,11 @@ if __name__ == '__main__':
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = uNet(n_channels=3)
     model = model.to(device, memory_format=torch.channels_last)
-    model = train(model, epochs=10, learning_rate=1e-4, batch_size=4, device=device)
+    model = train(model, epochs=20, learning_rate=1e-5, batch_size=8, device=device)
+    
+    
+##################################################################################################
+# move the code around plot and predict in the util file
+# move the eval in another file
+# move the loading in another file
+ 
