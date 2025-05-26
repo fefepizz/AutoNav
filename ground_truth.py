@@ -46,8 +46,6 @@ def largest_ann(anns):
     img = img * 0.3  # Scale intensity to be below 0.35
 
     ax.imshow(img, cmap='gray') # Display using grayscale colormap
-    
-# os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"       # Fix for KMP_DUPLICATE_LIB_OK error
 
 def load_images(images_path, start_idx=20, end_idx=21):
     image_files = sorted(os.listdir(images_path))[start_idx:end_idx]
@@ -62,16 +60,17 @@ def load_images(images_path, start_idx=20, end_idx=21):
     
     return images
 
-images = load_images("TinyAgri/Crops/scene2", start_idx=0, end_idx=len(os.listdir("TinyAgri/Crops/scene2")))
+# Use os.path.join for data directory
+crops_dir = os.path.join("data", "TinyAgri", "Crops", "scene2")
+images = load_images(crops_dir, start_idx=0, end_idx=len(os.listdir(crops_dir)))
 
 
-# Download the model using wget
-model_url = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth"
-model_path = "sam_model/sam_vit_h_4b8939.pth"
+model_path = os.path.join("models", "sam_vit_h_4b8939.pth")
 os.makedirs(os.path.dirname(model_path), exist_ok=True)
 
-if not os.path.exists(model_path):
-    print("Downloading SAM model...")
+if not os.path.isfile(model_path):
+    print("SAM model not found, downloading...")
+    model_url = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth"
     subprocess.run(["wget", "-O", model_path, model_url], check=True)
     print("Download complete.")
 
@@ -87,12 +86,12 @@ sam.to(device= device)
 
 mask_gen = SamAutomaticMaskGenerator(
     model=sam,
-    points_per_side=8,
-    # pred_iou_thresh=0.86,
-    # stability_score_thresh=0.92,
-    # crop_n_layers=1,
-    # crop_n_points_downscale_factor=2,
-    min_mask_region_area=100,  # Requires open-cv to run post-processing, doesn't seem to be working at all
+    points_per_side=4,  # Lower for coarser masks, helps merge small regions, 8 before
+    pred_iou_thresh=0.7,  # Lower to merge more regions
+    stability_score_thresh=0.7,  # Lower to allow less stable (but larger) masks
+    crop_n_layers=1,  # Default, for speed
+    crop_n_points_downscale_factor=2,  # Default
+    min_mask_region_area=5000,  # Much higher to ignore small plants/leaves
 )
 
 masks = []
@@ -144,7 +143,7 @@ for l, m in enumerate(masks):
         for i, point in enumerate(sampled_points):
             line_points[l, i+1] = point
 
-        output_dir = os.path.join('masks', 'cs2')
+        output_dir = os.path.join('data', 'masks', 'cs2')
         os.makedirs(output_dir, exist_ok=True)
         m_filepath = os.path.join(output_dir, f'mask{l}.png')
         cv2.imwrite(m_filepath, m * 255)  # Save the mask, scaling to 0-255 for visibility
@@ -158,5 +157,7 @@ for l, m in enumerate(masks):
 columns = ['v_point'] + [f'point{i}' for i in range(1, 11)]
 df = pd.DataFrame(line_points, columns=columns)
 
-csv_filepath = os.path.join(os.getcwd(), 'line_points_cs2.csv')
+csv_dir = os.path.join("data", "csv")
+os.makedirs(csv_dir, exist_ok=True)
+csv_filepath = os.path.join(csv_dir, 'line_points_cs2.csv')
 df.to_csv(csv_filepath, index=False)
