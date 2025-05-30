@@ -86,12 +86,12 @@ sam.to(device= device)
 
 mask_gen = SamAutomaticMaskGenerator(
     model=sam,
-    points_per_side=4,  # Lower for coarser masks, helps merge small regions, 8 before
-    pred_iou_thresh=0.7,  # Lower to merge more regions
-    stability_score_thresh=0.7,  # Lower to allow less stable (but larger) masks
-    crop_n_layers=1,  # Default, for speed
-    crop_n_points_downscale_factor=2,  # Default
-    min_mask_region_area=5000,  # Much higher to ignore small plants/leaves
+    points_per_side=4,  # Very coarse, may miss small/thin objects. Increase (e.g., 8, 16) for finer masks.
+    pred_iou_thresh=0.7,  # Lower merges more regions, but can reduce mask quality.
+    stability_score_thresh=0.7,  # Lower allows less stable (but larger) masks.
+    crop_n_layers=1,  # Default, for speed.
+    crop_n_points_downscale_factor=2,  # Default.
+    min_mask_region_area=5000,  # Ignores small objects. Lower if you want to keep smaller regions.
 )
 
 masks = []

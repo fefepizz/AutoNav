@@ -5,14 +5,34 @@ import torchvision.transforms as transforms
 import os
 import tqdm
 import matplotlib.pyplot as plt
+
 from models.uNet import uNet
+from models.segNet import segNet
+
 from utils.LoadDataset import LoadDataset
 from utils.metrics import plot_metrics, plot_prediction
 
-def train(model, device, epochs: int=1, learning_rate: float=1e-5, batch_size: int=1):
+def compute_loss(outputs, labels, criterion, distillation=False, teacher_outputs=None, alpha=0.5, temperature=2.0):
+    """
+    Compute the loss between outputs and labels using the provided criterion.
+    If distillation is True, combine standard loss with distillation loss from teacher_outputs.
+    alpha: weight for standard loss, (1-alpha) for distillation loss.
+    temperature: softening parameter for distillation.
+    """
+    # Standard loss
+    if not distillation or teacher_outputs is None:
+        return criterion(outputs, labels)
+    
+    loss_stud = criterion(outputs, labels)
+    # Distillation loss: MSE between student and teacher outputs
+    mse_loss = torch.nn.MSELoss()
+    loss_teacher = mse_loss(torch.sigmoid(outputs), torch.sigmoid(teacher_outputs))
+    return alpha * loss_stud + (1 - alpha) * loss_teacher
+
+def train(model, device, criterion, epochs: int=1, learning_rate: float=1e-5, batch_size: int=1, teacher_model=None, distill_alpha=0.5, distill_temp=2.0):
     
     transform = transforms.Compose([
-        # transforms.Resize((128, 128)),
+        # transforms.Resize((120, 120)),
         transforms.RandomHorizontalFlip(),
         transforms.RandomRotation(degrees=20),
         transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.05),
@@ -26,10 +46,10 @@ def train(model, device, epochs: int=1, learning_rate: float=1e-5, batch_size: i
     img_files = sorted([os.path.join(img_dir, f) for f in os.listdir(img_dir) if f.endswith(".png")])
     mask_files = sorted([os.path.join(mask_dir, f) for f in os.listdir(mask_dir) if f.endswith(".png")])
 
-    train_img_files = [f for f in img_files if os.path.basename(f).startswith(("frame1", "frame3"))]
-    train_mask_files = [f for f in mask_files if os.path.basename(f).startswith(("frame1", "frame3"))]
-    val_img_files = [f for f in img_files if os.path.basename(f).startswith(("frame2", "frame4"))]
-    val_mask_files = [f for f in mask_files if os.path.basename(f).startswith(("frame2", "frame4"))]
+    train_img_files = [f for f in img_files if os.path.basename(f).startswith(("frame1", "frame4"))]
+    train_mask_files = [f for f in mask_files if os.path.basename(f).startswith(("frame1", "frame4"))]
+    val_img_files = [f for f in img_files if os.path.basename(f).startswith(("frame2", "frame3"))]
+    val_mask_files = [f for f in mask_files if os.path.basename(f).startswith(("frame2", "frame3"))]
 
     assert len(train_img_files) == len(train_mask_files), "Mismatch between training images and masks"
     assert len(val_img_files) == len(val_mask_files), "Mismatch between validation images and masks"
@@ -51,7 +71,6 @@ def train(model, device, epochs: int=1, learning_rate: float=1e-5, batch_size: i
     print(f"Trainable parameters: {total_trainable_params:,}")
     print(f"Model size: {model_size_mb:.2f} MB")
     
-    criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     
     best_val_acc = 0.0
@@ -61,27 +80,27 @@ def train(model, device, epochs: int=1, learning_rate: float=1e-5, batch_size: i
     val_accs = []
     
     for epoch in range(epochs):
-        
         model.train()
-        
         running_loss = 0.0
         correct = 0
         total = 0
-        
+
         train_loop = tqdm.tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs} (Train)", leave=True)
-        
+
         for inputs, labels in train_loop:
-            
             inputs, labels = inputs.to(device), labels.to(device)
             optimizer.zero_grad()
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-            
+            if teacher_model is not None:
+                with torch.no_grad():
+                    teacher_outputs = teacher_model(inputs)
+                outputs = model(inputs)
+                loss = compute_loss(outputs, labels, criterion, distillation=True, teacher_outputs=teacher_outputs, alpha=distill_alpha, temperature=distill_temp)
+            else:
+                outputs = model(inputs)
+                loss = compute_loss(outputs, labels, criterion)
             loss.backward()
             optimizer.step()
-            
             running_loss += loss.item() * inputs.size(0)
-             
             preds = (torch.sigmoid(outputs) > 0.5)
             labels_bin = (labels > 0.5)
             correct += (preds == labels_bin).sum().item()
@@ -139,7 +158,7 @@ def validate(model, val_loader, criterion, device, epoch, epochs):
         for inputs, labels in val_loop:
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
-            loss = criterion(outputs, labels)
+            loss = compute_loss(outputs, labels, criterion)
             val_loss += loss.item() * inputs.size(0)
 
             preds = (torch.sigmoid(outputs) > 0.5)
@@ -156,12 +175,34 @@ def validate(model, val_loader, criterion, device, epoch, epochs):
 
 if __name__ == '__main__':
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model = uNet(n_channels=3)
-    model = model.to(device, memory_format=torch.channels_last)
-    model = train(model, epochs=30, learning_rate=1e-5, batch_size=8, device=device)
     
+    # Train uNet (teacher) from scratch and save weights
+    unet_model = uNet(n_channels=3)
+    unet_model = unet_model.to(device, memory_format=torch.channels_last)
+    unet_criterion = nn.BCEWithLogitsLoss()
+    print("Training uNet (teacher) model...")
+    trained_unet = train(unet_model, device, unet_criterion, epochs=55, learning_rate=1e-6, batch_size=8)
+    torch.save(trained_unet.state_dict(), 'models/uNet.pth')
+    print("uNet weights saved to models/uNet.pth")
+
+    """
+    # Load segNet as student
+    student_model = segNet(n_channels=3)
+    student_model = student_model.to(device, memory_format=torch.channels_last)
     
-##################################################################################################
-# move the code around plot and predict in the util file
-# move the eval in another file
-# move the loading in another file
+    # Load uNet as teacher
+    teacher_model = uNet(n_channels=3)
+    teacher_weights_path = 'models/uNet.pth'
+    teacher_model.load_state_dict(torch.load(teacher_weights_path, map_location=device))
+    teacher_model = teacher_model.to(device, memory_format=torch.channels_last)
+    teacher_model.eval()
+    for p in teacher_model.parameters():
+        p.requires_grad = False
+
+    # Define loss function
+    criterion = nn.BCEWithLogitsLoss()
+    
+    # Train segNet with distillation from uNet
+    trained_model = train(student_model, device, criterion, epochs=55, learning_rate=1e-6, batch_size=8, teacher_model=teacher_model, distill_alpha=0.5, distill_temp=2.0)
+
+    """
