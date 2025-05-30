@@ -62,8 +62,10 @@ def load_images(images_path, start_idx=20, end_idx=21):
 
 # Use os.path.join for data directory
 crops_dir = os.path.join("data", "TinyAgri", "Crops", "scene2")
-images = load_images(crops_dir, start_idx=0, end_idx=len(os.listdir(crops_dir)))
+# images = load_images(crops_dir, start_idx=0, end_idx=len(os.listdir(crops_dir)))
 
+# debugging: load only a few images
+images = load_images(crops_dir, start_idx=0, end_idx=20)
 
 model_path = os.path.join("models", "sam_vit_h_4b8939.pth")
 os.makedirs(os.path.dirname(model_path), exist_ok=True)
@@ -129,7 +131,8 @@ for l, m in enumerate(masks):
             
     # we can assume the vanishing point is not too close to the border
     # and that the mask covers most of the picture
-    if 30 < min_val < height and np.mean(m) > 0.4:
+    if 20 < min_val < height and np.mean(m) > 0.3:
+        
         # find all columns with minimum y-position
         indices = [i for i, val in enumerate(last_p) if val == min_val]
         median_x = indices[len(indices) // 2] # median
@@ -143,12 +146,23 @@ for l, m in enumerate(masks):
         for i, point in enumerate(sampled_points):
             line_points[l, i+1] = point
 
-        output_dir = os.path.join('data', 'masks', 'cs2')
+        # Change output directory for masks temporarily
+        output_dir = os.path.join('data', 'masks', 'tmp_cs2')
         os.makedirs(output_dir, exist_ok=True)
         m_filepath = os.path.join(output_dir, f'mask{l}.png')
         cv2.imwrite(m_filepath, m * 255)  # Save the mask, scaling to 0-255 for visibility
         print(f"Mask {l} saved to: {m_filepath}")
 
+        ##############################################################################################################
+        # Also save the corresponding input image in a temporary folder
+        img_output_dir = os.path.join('data', 'masks', 'tmp_cs2_images')
+        os.makedirs(img_output_dir, exist_ok=True)
+        img_filepath = os.path.join(img_output_dir, f'image{l}.png')
+        # Convert RGB back to BGR for OpenCV saving
+        cv2.imwrite(img_filepath, cv2.cvtColor(images[l], cv2.COLOR_RGB2BGR))
+        print(f"Image {l} saved to: {img_filepath}")
+        ###############################################################################################################
+        
     else:
         print(f"Mask {l}: No non-zero pixels found")
         
