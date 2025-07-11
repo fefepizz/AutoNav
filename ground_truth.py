@@ -9,12 +9,6 @@ import subprocess
 print("CUDA is available:", torch.cuda.is_available())
 
 def ensure_sam_model(model_path):
-    """
-    Download SAM model if not present in the specified path.
-    
-    Args:
-        model_path (str): Path where the model should be located
-    """
     os.makedirs(os.path.dirname(model_path), exist_ok=True)
     if not os.path.isfile(model_path):
         print("SAM model not found, downloading...")
@@ -22,19 +16,17 @@ def ensure_sam_model(model_path):
         subprocess.run(["wget", "-O", model_path, model_url], check=True)
         print("Download complete.")
 
-def load_images(images_path, start_idx, end_idx):
-    """
-    Load and preprocess images from the specified directory.
-    
-    Args:
-        images_path (str): Directory containing the images
-        start_idx (int): Starting index for image selection
-        end_idx (int): Ending index for image selection
-    
-    Returns:
-        list: List of preprocessed RGB images
-    """
-    image_files = sorted(os.listdir(images_path))[start_idx:end_idx]
+def load_images(images_path, start_idx=0, end_idx=None):
+    def get_frame_number(filename):
+        # Extract the frame number from filename like 'd5_s1_frame123.png'
+        import re
+        match = re.search(r'frame(\d+)', filename)
+        return int(match.group(1)) if match else 0
+
+    image_files = sorted(os.listdir(images_path), key=get_frame_number)
+    if end_idx is None:
+        end_idx = len(image_files)
+    image_files = image_files[start_idx:end_idx]
     images = []
     for img_file in image_files:
         image_full_path = os.path.join(images_path, img_file)
@@ -45,13 +37,6 @@ def load_images(images_path, start_idx, end_idx):
     return images
 
 def save_line_points_csv(line_points, csv_filepath):
-    """
-    Save detected line points to a CSV file.
-    
-    Args:
-        line_points (np.array): Array containing detected points
-        csv_filepath (str): Path where to save the CSV file
-    """
     columns = ['v_point'] + [f'point{i}' for i in range(1, 11)]
     df = pd.DataFrame(line_points, columns=columns)
     csv_dir = os.path.dirname(csv_filepath)
@@ -111,8 +96,8 @@ def process_mask(mask, mask_index, output_dir):
 def main():
     """Main function to process images and generate masks."""
     # Load images
-    img_dir = os.path.join("data", "TinyAgri", "Tomatoes", "scene1")
-    images = load_images(img_dir, start_idx=0, end_idx=50)  # Limit to first 50 images
+    img_dir = os.path.join("data", "TinyAgri", "Crops", "scene1") ########################################
+    images = load_images(img_dir)
 
     # Initialize SAM model
     model_path = os.path.join("models", "sam_vit_h_4b8939.pth")
@@ -141,7 +126,7 @@ def main():
 
     # Process masks and collect line points
     line_points = np.zeros((len(masks), 11), dtype=object)
-    output_dir = os.path.join('data', 'masks', 'Tomatoes', 'scene1')
+    output_dir = os.path.join('data', 'masks', 'Crops', 'scene1') ########################################
     
     for mask_idx, mask in enumerate(masks, start=1):  # Start indexing from 1
         v_point, sampled_points = process_mask(mask, mask_idx, output_dir)
@@ -151,7 +136,7 @@ def main():
                 line_points[mask_idx-1, point_idx + 1] = point
 
     # Save results
-    csv_filepath = os.path.join("data", "csv", "line_points_ts1.csv")
+    csv_filepath = os.path.join("data", "csv", "line_points_cs1.csv") #############################################
     save_line_points_csv(line_points, csv_filepath)
 
 if __name__ == "__main__":

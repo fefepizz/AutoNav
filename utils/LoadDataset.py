@@ -4,8 +4,18 @@ from torch.utils.data import Dataset
 
 class LoadDataset(Dataset):
     def __init__(self, img_files, mask_files, transform=None):
-        self.img_files = img_files
-        self.mask_files = mask_files
+        def get_frame_number(filename):
+            # Extract the frame number from filename like 'd5_s1_frame123.png' or 'mask123.png'
+            import re
+            if 'frame' in filename:
+                match = re.search(r'frame(\d+)', filename)
+            else:
+                match = re.search(r'mask(\d+)', filename)
+            return int(match.group(1)) if match else 0
+            
+        # Sort both lists numerically by frame/mask number
+        self.img_files = sorted(img_files, key=get_frame_number)
+        self.mask_files = sorted(mask_files, key=get_frame_number)
         self.transform = transform
 
     def __len__(self):
