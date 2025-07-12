@@ -16,5 +16,7 @@ __pycache__/
 /data/
 /TinyAgri/
 /masks/
+.png
 
-
+# Escludi i file processati
+/processed_data/
