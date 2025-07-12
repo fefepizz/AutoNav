@@ -1,1 +1,1 @@
-from .BU_Net_model import Bu_Net
+from .BU_Net_model import BU_Net

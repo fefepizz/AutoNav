@@ -72,13 +72,13 @@ def plot_prediction(image, actual_mask, predicted_mask):
 
     axs[2].imshow(img, alpha=0.7)
     axs[2].imshow(overlay, alpha=0.5)
-    axs[2].set_title("Overlay: GT (Yellow), Wrong pred (Red), Overlap (Green)")
+    axs[2].set_title("Overlay: GT Only (Yellow), Prediction Only (Red), Overlap (Green)")
     axs[2].axis('off')
 
     # Legend
-    yellow_patch = mpatches.Patch(color='yellow', label='Correct Label')
-    red_patch = mpatches.Patch(color='red', label='Wrong Pixel')
-    green_patch = mpatches.Patch(color='green', label='Correct Pixel')
+    yellow_patch = mpatches.Patch(color='yellow', label='GT Only')
+    red_patch = mpatches.Patch(color='red', label='Prediction Only')
+    green_patch = mpatches.Patch(color='green', label='Overlap')
     axs[2].legend(handles=[yellow_patch, red_patch, green_patch], loc='lower right')
 
     plt.tight_layout()

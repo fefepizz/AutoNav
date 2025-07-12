@@ -23,8 +23,9 @@ plt.figure(figsize=(20, 4 * num_samples))
 for idx, img_filename in enumerate(img_files):
     img_path = os.path.join(img_dir, img_filename)
 
-    # Get corresponding mask (maskX.png where X is position number)
-    mask_filename = f"mask{idx + 1}.png"
+    # Extract frame number from filename (e.g., d5_s1_frame123.png -> 123)
+    frame_number = img_filename.split('frame')[1].split('.')[0]
+    mask_filename = f"mask{frame_number}.png"
     mask_path = os.path.join(mask_dir, mask_filename)
     
     # Load mask if it exists, otherwise create blank mask

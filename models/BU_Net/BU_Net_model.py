@@ -19,12 +19,11 @@ class BU_Net(nn.Module):
         self.bottleneck = TripleConv(2048, 2048)
         
         # Decoder
-        self.up1 = Up(2048, 1024, stride=1)
-        self.up2 = Up(1024, 512, stride=1)
-        self.up3 = Up(512, 256, stride=1)
-        self.up4 = Up(256, 128, stride=1)
-        self.up5 = Up(128, 64, stride=1)
-        self.in_conv = TripleConv(n_channels, 64, stride=1)
+        self.up1 = Up(2048 + 1024, 1024, stride=1)  # 2048 (bottleneck) + 1024 (skip from down4)
+        self.up2 = Up(1024 + 512, 512, stride=1)    # 1024 (up1) + 512 (skip from down3)
+        self.up3 = Up(512 + 256, 256, stride=1)     # 512 (up2) + 256 (skip from down2)
+        self.up4 = Up(256 + 128, 128, stride=1)     # 256 (up3) + 128 (skip from down1)
+        self.up5 = Up(128 + 64, 64, stride=1)       # 128 (up4) + 64 (skip from in_conv)
 
         # Output
         self.out_conv = nn.Conv2d(64, 1, kernel_size=1)

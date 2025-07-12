@@ -96,11 +96,11 @@ def process_mask(mask, mask_index, output_dir):
 def main():
     """Main function to process images and generate masks."""
     # Load images
-    img_dir = os.path.join("data", "TinyAgri", "Crops", "scene1") ########################################
+    img_dir = os.path.join("data", "TinyAgri", "Crops", "scene2") ########################################
     images = load_images(img_dir)
 
     # Initialize SAM model
-    model_path = os.path.join("models", "sam_vit_h_4b8939.pth")
+    model_path = os.path.join("models/sam_model", "sam_vit_h_4b8939.pth")
     ensure_sam_model(model_path)
     
     model_type = "vit_h"
@@ -117,26 +117,31 @@ def main():
 
     # Generate masks for each image
     masks = []
+    original_indices = []  # Track original image indices
     for img_idx, img in enumerate(images, start=1):  # Start indexing from 1
         anns = mask_gen.generate(img)
         sorted_anns = sorted(anns, key=lambda x: x['area'], reverse=True)
+        if len(sorted_anns) == 0:  # Simple check to avoid IndexError
+            print(f"No masks found for image {img_idx}, skipping...")
+            continue
         ann = sorted_anns[0]
         masks.append(ann['segmentation'].astype(np.uint8))
+        original_indices.append(img_idx)  # Keep track of original image index
         print(f"Done with mask: {img_idx}")
 
     # Process masks and collect line points
     line_points = np.zeros((len(masks), 11), dtype=object)
-    output_dir = os.path.join('data', 'masks', 'Crops', 'scene1') ########################################
+    output_dir = os.path.join('data', 'masks', 'Crops', 'scene2') ########################################
     
-    for mask_idx, mask in enumerate(masks, start=1):  # Start indexing from 1
-        v_point, sampled_points = process_mask(mask, mask_idx, output_dir)
+    for mask_idx, (mask, orig_idx) in enumerate(zip(masks, original_indices)):
+        v_point, sampled_points = process_mask(mask, orig_idx, output_dir)  # Use original index for naming
         if v_point and sampled_points:
-            line_points[mask_idx-1, 0] = v_point  # Adjust array index to 0-based
+            line_points[mask_idx, 0] = v_point  # Use mask_idx for array indexing
             for point_idx, point in enumerate(sampled_points):
-                line_points[mask_idx-1, point_idx + 1] = point
+                line_points[mask_idx, point_idx + 1] = point
 
     # Save results
-    csv_filepath = os.path.join("data", "csv", "line_points_cs1.csv") #############################################
+    csv_filepath = os.path.join("data", "csv", "line_points_cs2.csv") #############################################
     save_line_points_csv(line_points, csv_filepath)
 
 if __name__ == "__main__":

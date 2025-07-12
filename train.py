@@ -6,7 +6,7 @@ import os
 import tqdm
 import matplotlib.pyplot as plt
 
-from models.uNet import uNet
+from models.BU_Net import BU_Net
 from models.segNet import segNet
 
 from utils.LoadDataset import LoadDataset
@@ -40,10 +40,10 @@ def train(model, device, criterion, epochs: int=1, learning_rate: float=1e-5, ba
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
     
-    img_dir = "data/processed_data/img"
-    mask_dir = "data/processed_data/mask"
+    img_dir = "processed_data/img"
+    mask_dir = "processed_data/mask"
     
-    img_files = sorted([os.path.join(img_dir, f) for f in os.listdir(img_dir) if f.endswith(".png")])
+    img_files = sorted([os.path.join(img_dir, f) for f in os.listdir(img_dir) if (f.endswith(".png"))])
     mask_files = sorted([os.path.join(mask_dir, f) for f in os.listdir(mask_dir) if f.endswith(".png")])
 
     train_img_files = [f for f in img_files if os.path.basename(f).startswith(("frame1", "frame4"))]
@@ -176,8 +176,8 @@ def validate(model, val_loader, criterion, device, epoch, epochs):
 if __name__ == '__main__':
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
-    # Train uNet (teacher) from scratch and save weights
-    unet_model = uNet(n_channels=3)
+    # Train BU_Net (teacher) from scratch and save weights
+    unet_model = BU_Net(n_channels=3)
     unet_model = unet_model.to(device, memory_format=torch.channels_last)
     unet_criterion = nn.BCEWithLogitsLoss()
     print("Training uNet (teacher) model...")
@@ -191,8 +191,8 @@ if __name__ == '__main__':
     student_model = student_model.to(device, memory_format=torch.channels_last)
     
     # Load uNet as teacher
-    teacher_model = uNet(n_channels=3)
-    teacher_weights_path = 'models/uNet.pth'
+    teacher_model = BU_Net(n_channels=3)
+    teacher_weights_path = 'models/BU_Net.pth'
     teacher_model.load_state_dict(torch.load(teacher_weights_path, map_location=device))
     teacher_model = teacher_model.to(device, memory_format=torch.channels_last)
     teacher_model.eval()
@@ -204,5 +204,4 @@ if __name__ == '__main__':
     
     # Train segNet with distillation from uNet
     trained_model = train(student_model, device, criterion, epochs=55, learning_rate=1e-6, batch_size=8, teacher_model=teacher_model, distill_alpha=0.5, distill_temp=2.0)
-
-    """
+"""

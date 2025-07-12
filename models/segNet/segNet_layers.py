@@ -47,7 +47,7 @@ class Up(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1):
         super().__init__()
         self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-        self.conv = DoubleConv(in_channels // 2, out_channels, stride=stride)
+        self.conv = DoubleConv(in_channels, out_channels, stride=stride)
 
     def forward(self, x):
         x = self.up(x)
