@@ -96,7 +96,7 @@ def process_mask(mask, mask_index, output_dir):
 def main():
     """Main function to process images and generate masks."""
     # Load images
-    img_dir = os.path.join("data", "TinyAgri", "Crops", "scene2") ########################################
+    img_dir = os.path.join("data", "TinyAgri", "Crops", "scene1") ########################################
     images = load_images(img_dir)
 
     # Initialize SAM model
@@ -112,7 +112,7 @@ def main():
     mask_gen = SamAutomaticMaskGenerator(
         model=sam,
         points_per_side=4,
-        min_mask_region_area=8000, 
+        min_mask_region_area=4000, 
     )
 
     # Generate masks for each image
@@ -131,7 +131,7 @@ def main():
 
     # Process masks and collect line points
     line_points = np.zeros((len(masks), 11), dtype=object)
-    output_dir = os.path.join('data', 'masks', 'Crops', 'scene2') ########################################
+    output_dir = os.path.join('data', 'masks', 'Crops', 'scene1') ########################################
     
     for mask_idx, (mask, orig_idx) in enumerate(zip(masks, original_indices)):
         v_point, sampled_points = process_mask(mask, orig_idx, output_dir)  # Use original index for naming
@@ -141,7 +141,7 @@ def main():
                 line_points[mask_idx, point_idx + 1] = point
 
     # Save results
-    csv_filepath = os.path.join("data", "csv", "line_points_cs2.csv") #############################################
+    csv_filepath = os.path.join("data", "csv", "line_points_cs1.csv") #############################################
     save_line_points_csv(line_points, csv_filepath)
 
 if __name__ == "__main__":

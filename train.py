@@ -121,7 +121,7 @@ def train(model, device, criterion, epochs: int=1, learning_rate: float=1e-5, ba
         
         if val_acc > best_val_acc:
             best_val_acc = val_acc            
-            torch.save(model.state_dict(), 'models/best_model.pth')
+            torch.save(model.state_dict(), 'models/temp_model.pth')
     
     plot_metrics(train_losses, val_losses, train_accs, val_accs, epochs)
     print(f'Best validation accuracy: {best_val_acc:.4f}')
@@ -175,22 +175,22 @@ def validate(model, val_loader, criterion, device, epoch, epochs):
 
 if __name__ == '__main__':
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    
+    """
     # Train BU_Net (teacher) from scratch and save weights
     unet_model = BU_Net(n_channels=3)
     unet_model = unet_model.to(device, memory_format=torch.channels_last)
     unet_criterion = nn.BCEWithLogitsLoss()
-    print("Training uNet (teacher) model...")
-    trained_unet = train(unet_model, device, unet_criterion, epochs=55, learning_rate=1e-6, batch_size=8)
-    torch.save(trained_unet.state_dict(), 'models/uNet.pth')
-    print("uNet weights saved to models/uNet.pth")
+    print("Training BU_Net (teacher) model...")
+    trained_unet = train(unet_model, device, unet_criterion, epochs=80, learning_rate=1e-6, batch_size=8)
+    torch.save(trained_unet.state_dict(), 'models/BU_Net.pth')
+    print("BU_Net weights saved to models/BU_Net.pth")
 
     """
     # Load segNet as student
     student_model = segNet(n_channels=3)
     student_model = student_model.to(device, memory_format=torch.channels_last)
     
-    # Load uNet as teacher
+    # Load BU_Net as teacher
     teacher_model = BU_Net(n_channels=3)
     teacher_weights_path = 'models/BU_Net.pth'
     teacher_model.load_state_dict(torch.load(teacher_weights_path, map_location=device))
@@ -202,6 +202,8 @@ if __name__ == '__main__':
     # Define loss function
     criterion = nn.BCEWithLogitsLoss()
     
-    # Train segNet with distillation from uNet
-    trained_model = train(student_model, device, criterion, epochs=55, learning_rate=1e-6, batch_size=8, teacher_model=teacher_model, distill_alpha=0.5, distill_temp=2.0)
-"""
+    # Train segNet with distillation from BU_Net
+    trained_model = train(student_model, device, criterion, epochs=30, learning_rate=1e-5, batch_size=8, teacher_model=teacher_model, distill_alpha=0.5, distill_temp=2.0)
+    torch.save(trained_model.state_dict(), 'models/segNet_distilled.pth')
+    print("segNet (student) weights saved to models/segNet_distilled.pth")
+
