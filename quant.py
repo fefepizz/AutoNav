@@ -1,38 +1,18 @@
-#!/usr/bin/env python3
-"""Simple PyTorch Model Quantization - Dynamic quantization only"""
-
 import torch
 import torch.nn as nn
 import os
 import sys
 from pathlib import Path
-
-# Add models to path
-sys.path.append('models')
-
-try:
-    from models.segNet.segNet_model import segNet
-except ImportError:
-    segNet = None
-
-def quantize_model(model_path):
-    """Quantize a PyTorch model"""
-   
-    print(f"Quantizing: {model_path}")
+from models.MU_Net import MU_Net
     
-    # Create output directory
+def quantize_model(model_path):
+    
     os.makedirs("quantized", exist_ok=True)
     
-    # Load model (state dict only)
-    state_dict = torch.load(model_path)
-    
     # Create model
-    if segNet and 'segnet' in model_path.lower():
-        model = segNet(n_channels=3)
-        model.load_state_dict(state_dict)
-    else:
-        print(f"Unsupported model type: {model_path}")
-        return
+    model = MU_Net(n_channels=3)
+    state_dict = torch.load(model_path)
+    model.load_state_dict(state_dict)
     
     model.eval()
     

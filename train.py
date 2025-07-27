@@ -7,7 +7,7 @@ import tqdm
 import matplotlib.pyplot as plt
 
 from models.BU_Net import BU_Net
-from models.segNet import segNet
+from models.MU_Net import MU_Net
 
 from utils.LoadDataset import LoadDataset
 from utils.metrics import plot_metrics, plot_prediction
@@ -186,8 +186,8 @@ if __name__ == '__main__':
     print("BU_Net weights saved to models/BU_Net.pth")
 
     """
-    # Load segNet as student
-    student_model = segNet(n_channels=3)
+    # Load MU_Net as student
+    student_model = MU_Net(n_channels=3)
     student_model = student_model.to(device, memory_format=torch.channels_last)
     
     # Load BU_Net as teacher
@@ -201,9 +201,9 @@ if __name__ == '__main__':
 
     # Define loss function
     criterion = nn.BCEWithLogitsLoss()
-    
-    # Train segNet with distillation from BU_Net
-    trained_model = train(student_model, device, criterion, epochs=30, learning_rate=1e-5, batch_size=8, teacher_model=teacher_model, distill_alpha=0.5, distill_temp=2.0)
-    torch.save(trained_model.state_dict(), 'models/segNet_distilled.pth')
-    print("segNet (student) weights saved to models/segNet_distilled.pth")
 
+    # Train MU_Net with distillation from BU_Net
+    trained_model = train(student_model, device, criterion, epochs=30, learning_rate=1e-5, batch_size=8, teacher_model=teacher_model, distill_alpha=0.5, distill_temp=2.0)
+    torch.save(trained_model.state_dict(), 'models/MU_Net_distilled.pth')
+    print("MU_Net (student) weights saved to models/MU_Net_distilled.pth")
+    

@@ -14,7 +14,7 @@ from tqdm import tqdm
 import sys
 sys.path.append('models')
 
-from models.segNet.segNet_model import segNet
+from models.MU_Net.MU_Net_model import segNet
 from utils.LoadDataset import LoadDataset
 
 def load_quantized_model(quantized_path, model):
