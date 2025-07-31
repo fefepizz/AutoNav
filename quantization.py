@@ -70,7 +70,7 @@ def quantize_model(model_path):
     
     # Save quantized model
     model_name = Path(model_path).stem
-    output_path = os.path.join("quantized", f"{model_name}_quantized.pth")
+    output_path = os.path.join("models", f"{model_name}_quantized.pth")
     torch.save(quantized_state_dict, output_path)
     
     # Show results
