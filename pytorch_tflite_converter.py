@@ -10,11 +10,11 @@ def load_model(pth_path):
     model.eval()
     return model
 
-def export_to_onnx(model, onnx_path, input_shape=(1, 3, 224, 224)):
+def export_to_onnx(model, onnx_path, input_shape=(1, 3, 64, 48)):
     dummy_input = torch.randn(*input_shape)
     torch.onnx.export(
         model, 
-        dummy_input, 
+        dummy_input,            # check this whole function 
         onnx_path,
         input_names=["input"],
         output_names=["output"],
@@ -25,44 +25,37 @@ def export_to_onnx(model, onnx_path, input_shape=(1, 3, 224, 224)):
     print(f"Exported to ONNX: {onnx_path}")
 
 def convert_onnx_to_tflite_dynamic_quantization(onnx_path, tflite_path):
-    """
-    Convert ONNX to TFLite with dynamic quantization only
-    This reduces bit precision of weights without using any dataset
-    """
+    
     import onnx2tf
     
     tf_model_path = "tf_model"
     
-    # Convert ONNX to TensorFlow SavedModel
-    onnx2tf.convert(
+    onnx2tf.convert(            # controllare i parametri
         input_onnx_file_path=onnx_path,
         output_folder_path=tf_model_path,
         copy_onnx_input_output_names_to_tflite=True,
-        non_verbose=True
     )
-    
-    # Convert to TFLite with dynamic quantization
+
+    # si può utilizzare anche la libreria di github
+
     converter = tf.lite.TFLiteConverter.from_saved_model(tf_model_path)
     
-    # Enable dynamic quantization - this reduces bit precision of weights
+    #check this
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
-    
-    # Convert the model
     tflite_model = converter.convert()
     
-    # Save the quantized model
+    #check also this
     with open(tflite_path, "wb") as f:
         f.write(tflite_model)
     
-    print(f"Dynamic quantization completed: {tflite_path}")
-
-def verify_quantized_model(tflite_path, input_shape=(1, 3, 224, 224)):
-    """
-    Verify the quantized TFLite model
-    """
+    
+def verify_quantized_model(tflite_path, input_shape=(1, 3, 64, 48)):
+    
     interpreter = tf.lite.Interpreter(model_path=tflite_path)
     interpreter.allocate_tensors()
     
+    # sono tutte cose utili e necessarie?
+
     input_details = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
     
@@ -95,27 +88,10 @@ if __name__ == "__main__":
     onnx_model_path = "models/MU_Net.onnx"
     tflite_model_path = "models/MU_Net_quantized.tflite"
     
-    # Ensure output directory exists
-    os.makedirs("models", exist_ok=True)
-    
-    print("Starting dynamic quantization pipeline...")
-    
-    # Step 1: Load PyTorch model and export to ONNX
-    print("1. Loading PyTorch model...")
     model = load_model(pth_model_path)
     
-    print("2. Exporting to ONNX...")
     export_to_onnx(model, onnx_model_path)
     
-    # Step 2: Convert to TFLite with dynamic quantization
-    print("3. Converting to TFLite with dynamic quantization...")
     convert_onnx_to_tflite_dynamic_quantization(onnx_model_path, tflite_model_path)
     
-    # Step 3: Verify the quantized model
-    print("4. Verifying quantized model...")
     verify_quantized_model(tflite_model_path)
-    
-    print(f"\n✅ Dynamic quantization completed!")
-    print(f"Quantized model saved to: {tflite_model_path}")
-    print("\nNote: This uses dynamic quantization which reduces weight precision")
-    print("from float32 to int8, but keeps activations as float32 during inference.")
